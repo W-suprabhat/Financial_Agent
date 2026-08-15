@@ -96,9 +96,13 @@
   /* Every file emits the same cells in the same order - empty ones included - so the
      verdict column of one row sits above the verdict column of the next. The old
      flex-wrap version put a different number of chips on each row and lined up nothing. */
-  .row{display:grid;gap:4px 12px;padding:11px 0;border-top:1px solid var(--line);
-    align-items:center;
-    grid-template-columns:minmax(0,1fr) 214px 96px 96px 108px}
+  /* Capped rather than full-bleed: with a 1fr name column the row stretches to the
+     full page width, stranding the verdict and counts against the right edge with a
+     hand's width of nothing in between. The cap keeps one file's facts readable as a
+     single group while the columns still line up down a list of twenty. */
+  .row{display:grid;gap:4px 18px;padding:11px 0;border-top:1px solid var(--line);
+    align-items:center;max-width:920px;
+    grid-template-columns:minmax(0,1fr) 168px 92px 88px 172px}
   @media (max-width:820px){
     .row{grid-template-columns:minmax(0,1fr) 214px}
   }
@@ -107,12 +111,24 @@
   }
   .row:first-child{border-top:0}
   .row > *{justify-self:start;min-width:0;max-width:100%}
-  .row .num-cell{justify-self:end;font-size:12px;color:var(--muted);
+  /* Left-aligned, not right. Right-aligning "160 figures" and "53 rows" lined up the
+     ends of the words rather than the digits, and made every gap in the row depend on
+     how long that row's text happened to be - 151px in one place, 30px in the next. */
+  .row .num-cell{justify-self:start;font-size:12px;color:var(--muted);
     font-variant-numeric:tabular-nums}
-  @media (max-width:820px){ .row .num-cell{justify-self:start} }
   .fname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
   .fsize{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
   .chip{font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid transparent;white-space:nowrap}
+  /* Chips in a status row wrap rather than overflow their track. nowrap pushed the
+     engine chip clean out through the right edge of the card, and the exception
+     verdict ("3 exceptions · 176 of 179 figures (98%) verified") out over the figure
+     counts. The verdict has spaces so it wraps tidily; an engine name is one long
+     word, so it needs permission to break inside itself as a last resort.
+     inline-block keeps a wrapped chip one rounded box instead of two. Tracks stay a
+     fixed width: each row is its own grid, so an auto track would size to that row's
+     own content and the columns would stop lining up down the list. */
+  .row .chip{white-space:normal;display:inline-block}
+  .row .chip.info{overflow-wrap:anywhere}
   .chip.wait{background:var(--panel-2);color:var(--muted);border-color:var(--line)}
   .chip.run{background:var(--warn-bg);color:var(--warn)}
   .chip.done{background:var(--ok-bg);color:var(--ok)}
