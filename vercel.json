@@ -15,14 +15,5 @@
       "src": "/(.*)",
       "dest": "app/main.py"
     }
-  ],
-  "env": {
-    "AZURE_OPENAI_BASE_URL": "@azure_openai_base_url",
-    "AZURE_OPENAI_API_KEY": "@azure_openai_api_key",
-    "AZURE_OPENAI_DEPLOYMENT": "@azure_openai_deployment",
-    "DOC_PARSER_BLOB_CONNECTION_STRING": "@doc_parser_blob_connection_string",
-    "DOC_PARSER_BLOB_CONTAINER_NAME": "@doc_parser_blob_container_name",
-    "BLOB_UPLOAD_PREFIX": "@blob_upload_prefix",
-    "BLOB_OUTPUT_PREFIX": "@blob_output_prefix"
-  }
+  ]
 }
