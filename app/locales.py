@@ -60,19 +60,6 @@ PRESETS: Dict[str, Dict[str, str]] = {
 }
 
 
-def preset(name: Optional[str]) -> Tuple[Optional[NumberFormat], Optional[DateFormat]]:
-    """Turn a declared locale into the two formats, or (None, None) for AUTO."""
-    entry = PRESETS.get((name or "AUTO").upper())
-    if not entry or "decimal" not in entry:
-        return None, None
-    label = entry["label"]
-    return (
-        NumberFormat(decimal=entry["decimal"], group=entry["group"],
-                     evidence=f"declared: {label}", confident=True),
-        DateFormat(order=entry["order"], evidence=f"declared: {label}", confident=True),
-    )
-
-
 @dataclass
 class NumberFormat:
     decimal: str = "."
@@ -92,6 +79,19 @@ class DateFormat:
 
     def describe(self) -> str:
         return f"{self.order} - {self.evidence}"
+
+
+def preset(name: Optional[str]) -> Tuple[Optional[NumberFormat], Optional[DateFormat]]:
+    """Turn a declared locale into the two formats, or (None, None) for AUTO."""
+    entry = PRESETS.get((name or "AUTO").upper())
+    if not entry or "decimal" not in entry:
+        return None, None
+    label = entry["label"]
+    return (
+        NumberFormat(decimal=entry["decimal"], group=entry["group"],
+                     evidence=f"declared: {label}", confident=True),
+        DateFormat(order=entry["order"], evidence=f"declared: {label}", confident=True),
+    )
 
 
 # --------------------------------------------------------------------------
