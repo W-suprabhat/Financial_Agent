@@ -207,7 +207,7 @@ async def login_page():
 # --------------------------------------------------------------------------
 # access
 # --------------------------------------------------------------------------
-# Not authentication - a shared code and a typed name. It exists so an approval can
+# Not authentication - a typed name and nothing else. It exists so an approval can
 # name a person; see app/auth.py for the limits of that claim.
 
 @app.post("/auth/login", include_in_schema=False)
@@ -217,8 +217,6 @@ async def sign_in(payload: dict = Body(...)):
         raise HTTPException(status_code=400, detail="your name is required")
     if len(name) > 80:
         raise HTTPException(status_code=400, detail="that name is too long")
-    if not auth.check_access_code(payload.get("access_code") or ""):
-        raise HTTPException(status_code=401, detail="that access code is not right")
 
     response = JSONResponse({"name": name})
     response.set_cookie(

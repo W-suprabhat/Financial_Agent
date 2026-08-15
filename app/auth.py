@@ -1,19 +1,19 @@
 """
 Who is using this, and how the app will one day be told properly.
 
-This is deliberately not authentication. It is a shared access code plus a name the
-user types, which means anyone holding the code can claim to be anyone. What it buys
-is *identity*: every approval, correction and withdrawal can name a person instead of
-the literal string "analyst", and a fix learned on one engagement can be scoped to it.
-Those are data-model facts the rest of the app needs now, and they do not depend on how
-the identity was established.
+This is deliberately not authentication. It is a name the user types and nothing else,
+which means anyone can claim to be anyone. What it buys is *identity*: every approval,
+correction and withdrawal can name a person instead of the literal string "analyst", and
+a fix learned on one engagement can be scoped to it. Those are data-model facts the rest
+of the app needs now, and they do not depend on how the identity was established.
 
 The seam is current_user(). Everything else asks that dependency who is here and does
 not care how it found out. Moving to Entra ID later means rewriting this one function
 and its two routes - no call site changes, because no call site knows the difference.
 
-Until that happens this is a prototype gate: it keeps a demo URL from being wide open,
-and it must not be treated as protection for client documents.
+Until that happens there is NO gate at all. Anyone who reaches the URL can sign in as
+anyone, so a deployed instance is open to whoever finds it, and this must not be
+treated as protection for client documents.
 """
 
 from __future__ import annotations
@@ -90,18 +90,8 @@ def unsign(token: str) -> Optional[Dict[str, Any]]:
 
 
 def issue(name: str) -> str:
-    """A session cookie for someone who supplied the access code."""
+    """A session cookie for someone who typed a name."""
     return sign({"name": name, "issued_at": int(time.time())})
-
-
-def check_access_code(supplied: str) -> bool:
-    """
-    Whether the shared code is right.
-
-    compare_digest again: the code is one secret shared by everyone, so it is worth not
-    leaking its length or prefix through timing.
-    """
-    return hmac.compare_digest((supplied or "").strip(), settings.access_code)
 
 
 def user_from_cookie(token: Optional[str]) -> Optional[User]:

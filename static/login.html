@@ -35,7 +35,8 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
     padding:26px;width:100%;max-width:392px}
   h1{font-size:19px;margin:0;letter-spacing:-.01em}
-  .tagline{color:var(--muted);font-size:13px;margin:5px 0 20px}
+  .byline{color:var(--ink);font-size:12.5px;margin:6px 0 0;opacity:.75}
+  .tagline{color:var(--muted);font-size:13px;margin:4px 0 20px}
 
   /* One column, labels above fields, so every control shares a left edge. */
   form{display:grid;gap:14px}
@@ -58,6 +59,7 @@
 <body>
   <main class="card">
     <h1>Financial Statement Agent</h1>
+    <div class="byline">Built by Suprabhat Samanta &middot; Evalueserve</div>
     <div class="tagline">Sign in to extract and reconcile documents.</div>
 
     <form id="f">
@@ -67,18 +69,14 @@
         <input id="name" name="name" autocomplete="name" required maxlength="80"
                placeholder="e.g. Priya Nair">
       </label>
-      <label for="code">Access code
-        <input id="code" name="access_code" type="password" autocomplete="current-password"
-               required placeholder="shared with your team">
-      </label>
       <div class="msg" id="msg" role="alert" hidden></div>
-      <button type="submit" id="go">Sign in</button>
+      <button type="submit" id="go">Continue</button>
     </form>
 
     <div class="note">
-      Your name is recorded against every fix you approve or withdraw. This is a shared
-      access code, not an individual login &mdash; <b>do not put client documents through
-      this build.</b>
+      Your name is recorded against every fix you approve or withdraw. This is a typed
+      name, not an individual login &mdash; <b>do not put client documents through this
+      build.</b>
     </div>
   </main>
 
@@ -102,10 +100,7 @@ form.addEventListener('submit', async ev => {
     const res = await fetch('/auth/login', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        name: form.name.value,
-        access_code: form.access_code.value,
-      }),
+      body: JSON.stringify({name: form.name.value}),
     });
     if (!res.ok){
       let detail = await res.text();
@@ -116,9 +111,9 @@ form.addEventListener('submit', async ev => {
   } catch (err){
     msg.textContent = err.message || String(err);
     msg.hidden = false;
-    go.disabled = false; go.textContent = 'Sign in';
-    form.access_code.focus();
-    form.access_code.select();
+    go.disabled = false; go.textContent = 'Continue';
+    form.name.focus();
+    form.name.select();
   }
 });
 </script>

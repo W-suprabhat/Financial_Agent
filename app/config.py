@@ -184,17 +184,8 @@ class Settings:
         return int(os.getenv("MAX_FILE_SIZE_MB", "50")) * 1024 * 1024
 
     # --- Access ----------------------------------------------------------
-    # A shared code and a typed name: enough to attribute an approval to a person,
-    # not enough to prove one. See app/auth.py for what this is and is not.
-    @property
-    def access_code(self) -> str:
-        return os.getenv("APP_ACCESS_CODE", "demo")
-
-    @property
-    def access_code_is_default(self) -> bool:
-        """True when nobody has set a code, so startup can say so out loud."""
-        return not os.getenv("APP_ACCESS_CODE")
-
+    # A typed name: enough to attribute an approval to a person, not enough to prove
+    # one. See app/auth.py for what this is and is not.
     @property
     def session_secret(self) -> str:
         """
