@@ -1,0 +1,24 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.langgraph_api/
+.vercel/
+*.xlsx
+*.csv
+!requirements.txt
+
+# Real client documents / derived output - never committed. See app/auth.py's login
+# warning: do not put client documents through this build.
+/00_0_00_*.json
+/test.json
+/sample_output/
+/spike_output/
+tests/
+
+# Machine-local Claude Code settings (local base URL, local permissions)
+.claude/settings.local.json

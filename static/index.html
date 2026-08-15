@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Financial Statement Agent</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --panel-2:#fbfcfd; --ink:#12161c; --muted:#5c6675;
+    --line:#e3e7ec; --accent:#2f6feb; --accent-ink:#fff;
+    --ok:#127a4b; --ok-bg:#e6f5ed; --warn:#8a5a00; --warn-bg:#fdf3e0;
+    --err:#b3261e; --err-bg:#fdeceb; --radius:10px;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1216; --panel:#161b22; --panel-2:#1b2129; --ink:#e7ebf0; --muted:#9aa5b3;
+      --line:#2a323c; --accent:#4c8dff; --accent-ink:#0b0e12;
+      --ok:#5ddc9c; --ok-bg:#12291f; --warn:#e8b45a; --warn-bg:#2a2114;
+      --err:#ff8a80; --err-bg:#2d1614;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1216; --panel:#161b22; --panel-2:#1b2129; --ink:#e7ebf0; --muted:#9aa5b3;
+    --line:#2a323c; --accent:#4c8dff; --accent-ink:#0b0e12;
+    --ok:#5ddc9c; --ok-bg:#12291f; --warn:#e8b45a; --warn-bg:#2a2114;
+    --err:#ff8a80; --err-bg:#2d1614;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1280px;margin:0 auto;padding:24px 20px 72px}
+
+  /* Two panes: the steps on the left keep their state visible, the work happens on the
+     right. minmax(0,1fr) rather than 1fr is what lets a wide extract table shrink its
+     own scroll container instead of widening the whole page. */
+  .app{display:grid;grid-template-columns:216px minmax(0,1fr);gap:20px;align-items:start}
+  @media (max-width:900px){ .app{grid-template-columns:minmax(0,1fr)} }
+  .main{min-width:0}
+
+  .rail{display:flex;flex-direction:column;gap:2px;position:sticky;top:16px}
+  @media (max-width:900px){
+    .rail{position:static;flex-direction:row;overflow-x:auto;gap:6px;
+      padding-bottom:4px;scrollbar-width:thin}
+  }
+  .rail button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    padding:9px 11px;border:1px solid transparent;background:transparent;
+    border-radius:8px;font-size:13.5px;color:var(--muted);white-space:nowrap}
+  @media (max-width:900px){ .rail button{width:auto} }
+  .rail button:hover:not(:disabled){background:var(--panel-2);color:var(--ink);
+    border-color:var(--line)}
+  .rail button[aria-current="page"]{background:var(--panel);color:var(--ink);
+    border-color:var(--line);font-weight:600}
+  .rail button:disabled{opacity:.4;cursor:not-allowed}
+  /* State is named in the glyph's title as well as drawn, so it is not colour-only. */
+  .rail .mark{flex:none;width:15px;font-size:12px;text-align:center;
+    font-variant-numeric:tabular-nums}
+  .rail .mark.done{color:var(--ok)}
+  .rail .mark.busy{color:var(--warn)}
+
+  .pane{display:none}
+  .pane.on{display:block}
+
+  /* The coverage claim has to stay on screen while a reviewer scrolls hundreds of
+     figures - that is the whole reason for this layout. One bar per document, so each
+     sticks inside its own section rather than stacking on the one above. */
+  .verdictbar{position:sticky;top:0;z-index:5;background:var(--panel);
+    padding-top:2px;margin-bottom:14px}
+  .verdictbar .banner{margin-bottom:0}
+
+  header{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;
+    align-items:start;margin-bottom:18px}
+  @media (max-width:640px){ header{grid-template-columns:minmax(0,1fr)} }
+  h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  .tagline{color:var(--muted);font-size:13px;margin-top:4px;max-width:56ch}
+  .pills{display:flex;gap:7px;flex-wrap:wrap}
+  .pill{font-size:11.5px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);
+    background:var(--panel);color:var(--muted);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex:none}
+  .dot.on{background:var(--ok)} .dot.off{background:var(--err)}
+  button.pill{font:inherit;font-size:11.5px;cursor:pointer}
+  button.pill:hover{border-color:var(--accent);color:var(--ink)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px;margin-bottom:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 13px}
+
+  #drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:32px 18px;
+    text-align:center;cursor:pointer;transition:.15s;background:var(--panel-2)}
+  #drop:hover,#drop.hot{border-color:var(--accent);
+    background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  #drop strong{display:block;font-size:15px;margin-bottom:5px}
+  #drop span{color:var(--muted);font-size:13px}
+  #file{display:none}
+
+  /* Every file emits the same cells in the same order - empty ones included - so the
+     verdict column of one row sits above the verdict column of the next. The old
+     flex-wrap version put a different number of chips on each row and lined up nothing. */
+  .row{display:grid;gap:4px 12px;padding:11px 0;border-top:1px solid var(--line);
+    align-items:center;
+    grid-template-columns:minmax(0,1fr) 214px 96px 96px 108px}
+  @media (max-width:820px){
+    .row{grid-template-columns:minmax(0,1fr) 214px}
+  }
+  @media (max-width:520px){
+    .row{grid-template-columns:minmax(0,1fr)}
+  }
+  .row:first-child{border-top:0}
+  .row > *{justify-self:start;min-width:0;max-width:100%}
+  .row .num-cell{justify-self:end;font-size:12px;color:var(--muted);
+    font-variant-numeric:tabular-nums}
+  @media (max-width:820px){ .row .num-cell{justify-self:start} }
+  .fname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .fsize{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .chip{font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid transparent;white-space:nowrap}
+  .chip.wait{background:var(--panel-2);color:var(--muted);border-color:var(--line)}
+  .chip.run{background:var(--warn-bg);color:var(--warn)}
+  .chip.done{background:var(--ok-bg);color:var(--ok)}
+  .chip.fail{background:var(--err-bg);color:var(--err)}
+  .chip.info{background:var(--panel-2);color:var(--muted);border-color:var(--line)}
+  .chip.exc{background:var(--warn-bg);color:var(--warn)}
+  .spin{display:inline-block;width:10px;height:10px;border:2px solid currentColor;
+    border-right-color:transparent;border-radius:50%;animation:sp .7s linear infinite;
+    vertical-align:-1px;margin-right:5px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .err-detail{flex-basis:100%;font-size:12px;color:var(--err);font-family:var(--mono);
+    background:var(--err-bg);padding:8px 10px;border-radius:6px;overflow-x:auto}
+
+  .banner{border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:14px;
+    border:1px solid var(--line)}
+  .banner.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+  .banner.exc{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+  .banner.part{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+  .banner b{font-weight:700}
+  .banner .sub{display:block;margin-top:4px;font-size:12.5px;opacity:.85}
+
+  .prop{border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:8px;padding:13px 15px;margin-bottom:12px;background:var(--panel-2)}
+  .prop h4{margin:0 0 6px;font-size:14px}
+  .prop .why{font-size:12.5px;color:var(--muted);margin-bottom:10px}
+  .prop .ex{font-family:var(--mono);font-size:11.5px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    padding:8px 10px;margin-bottom:10px;overflow-x:auto;white-space:pre}
+  .prop .once{font-size:12px;color:var(--accent);margin-top:8px}
+  .reported{border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:8px;padding:12px 14px;margin-bottom:12px;background:var(--panel-2);font-size:13px}
+  .reported b{display:block;margin-bottom:4px}
+  .reported .imp{color:var(--muted);font-size:12.5px;margin-top:5px}
+
+  /* A result built with a fix that has since been withdrawn. Same warn tone as .reported
+     - both say "this figure is not what it looks like" - but its own class because the
+     re-run button needs somewhere to sit that .reported's shape does not have. */
+  .stale{border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:8px;padding:12px 14px;margin-bottom:12px;background:var(--warn-bg);font-size:13px}
+  .stale b{display:block;margin-bottom:4px;color:var(--warn)}
+  .stale .sub{color:var(--muted);font-size:12.5px}
+  .stale button{margin-top:9px}
+  .learned{font-size:12.5px;color:var(--ok);margin-bottom:10px}
+
+  /* Equal columns from the grid, equal baselines from the markup: every metric emits all
+     three slots, so the value, the sub-line and the label sit at the same offset in each
+     card. An empty sub-line still occupies its line - see .pct:empty below - which is
+     what stops the one metric that has a percentage from dragging its label down. */
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+    gap:10px;margin-bottom:14px}
+  .metric{background:var(--panel-2);border:1px solid var(--line);
+    border-radius:8px;padding:11px 13px}
+  .metric .v{font-size:21px;font-weight:650;font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em;line-height:1.15}
+  .metric .pct{font-size:11.5px;color:var(--muted);margin-top:3px;
+    font-variant-numeric:tabular-nums}
+  .metric .pct:empty::after{content:"\00a0"}
+  .metric.short .v{color:var(--warn)}
+  .metric .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin-top:3px}
+
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
+  /* Prose wraps, figures do not. The reverse of this - nowrap on everything - was what
+     pushed description columns off the side of the card and made the result area scroll
+     horizontally instead of fitting. */
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);
+    white-space:normal;overflow-wrap:anywhere}
+  td.num,th.num,.prov td.printed,.st,td .st{white-space:nowrap;overflow-wrap:normal}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    font-weight:600;background:var(--panel-2);position:sticky;top:0}
+  td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  th.num{text-align:right}
+  tbody tr:last-child td{border-bottom:0}
+  tr.sub td{font-weight:650;background:var(--panel-2)}
+  tr.sec td{font-weight:650;color:var(--accent)}
+  tr.bad td{background:var(--err-bg)}
+
+  /* One table for every layout, not one table per layout. Separate tables each sized
+     their four columns from their own contents, so no column edge lined up with the one
+     above it - and none of them sat in a .tblwrap, so they had no border either. Fixed
+     layout pins every edge; the layout becomes a grouping row inside the single table. */
+  .learned-tbl{table-layout:fixed}
+  .learned-tbl col.c-by{width:170px}
+  .learned-tbl col.c-used{width:96px}
+  .learned-tbl col.c-status{width:112px}
+  .learned-tbl col.c-act{width:124px}
+  .learned-tbl tr.group td{background:var(--panel-2);font-size:11px;font-weight:650;
+    text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .learned-tbl tr.group .fp{font-family:var(--mono);font-size:11px;
+    text-transform:none;letter-spacing:0;opacity:.7;margin-left:7px}
+  /* Compact so a row with a button is the same height as a row without one. */
+  .learned-tbl td.act{white-space:nowrap}
+  .learned-tbl td.act button{padding:4px 10px;font-size:12px;border-radius:6px}
+  .learned-tbl td.act .none{color:var(--muted)}
+  /* A withdrawn fix stops applying, so it is no longer part of what the reviewer is
+     reading - but it is still the audit trail for a decision someone made, so it is
+     hidden rather than dropped, and one click brings it back. */
+  .learned-tbl:not(.show-gone) tr.gone{display:none}
+  .learned-tbl.show-gone tr.gone-note{display:none}
+  .lnk{background:none;border:0;padding:0;font:inherit;color:var(--accent);
+    cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .lnk:hover{opacity:.8}
+
+  details{margin-top:12px;border:1px solid var(--line);border-radius:8px;
+    background:var(--panel-2);padding:0}
+  summary{cursor:pointer;padding:10px 13px;font-size:13px;color:var(--muted);
+    list-style:none;user-select:none}
+  summary::-webkit-details-marker{display:none}
+  summary:before{content:"▸ ";}
+  details[open] summary:before{content:"▾ ";}
+  .details-body{padding:0 13px 13px}
+  pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.55;
+    white-space:pre;overflow-x:auto;color:var(--ink)}
+
+  /* Provenance: the table on the left, the proof for one figure on the right.
+     Collapses to a single column on narrow screens so the panel stays readable. */
+  .prov{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:12px}
+  @media (max-width:860px){ .prov{grid-template-columns:minmax(0,1fr)} }
+  .prov .tblwrap{max-height:340px;overflow-y:auto}
+  /* Fixed layout so the columns keep the same widths as rows are filtered - otherwise
+     switching from All to Exception reflows every column under the reader's cursor. */
+  .prov table{min-width:440px;table-layout:fixed}
+  .prov col.c-page{width:52px} .prov col.c-col{width:19%}
+  .prov col.c-printed{width:21%} .prov col.c-status{width:104px}
+  .prov tbody tr{cursor:pointer}
+  .prov tbody tr:hover td{background:var(--panel-2)}
+  .prov tbody tr.picked td{background:var(--accent);color:var(--accent-ink)}
+  .prov td.printed{font-family:var(--mono)}
+  .prov-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;align-items:center}
+  .prov-filters button{padding:5px 11px;font-size:12px;border-radius:999px}
+  .prov-filters button.on{background:var(--accent);color:var(--accent-ink);
+    border-color:var(--accent)}
+  .proof{border:1px solid var(--line);border-radius:8px;background:var(--panel);
+    padding:13px;font-size:13px;align-self:start;position:sticky;top:12px}
+  .proof h4{margin:0 0 3px;font-size:14px}
+  .proof .where{color:var(--muted);font-size:12px;margin-bottom:10px}
+  .proof dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;margin:0}
+  .proof dt{color:var(--muted);font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.04em;white-space:nowrap}
+  .proof dd{margin:0;overflow-wrap:anywhere}
+  .proof dd.mono{font-family:var(--mono)}
+  .proof .verdict{margin-top:11px;padding:9px 11px;border-radius:7px;font-size:12.5px}
+  .proof .verdict.ties{background:var(--ok-bg);color:var(--ok)}
+  .proof .verdict.exception{background:var(--err-bg);color:var(--err)}
+  .proof .verdict.unchecked{background:var(--warn-bg);color:var(--warn)}
+  .proof .verdict ul{margin:6px 0 0;padding-left:17px}
+  .proof .empty{color:var(--muted)}
+  .st{font-size:11px;padding:2px 7px;border-radius:999px;white-space:nowrap}
+  .st.ties{background:var(--ok-bg);color:var(--ok)}
+  .st.exception{background:var(--err-bg);color:var(--err)}
+  .st.unchecked{background:var(--warn-bg);color:var(--warn)}
+
+  .btns{display:flex;gap:9px;flex-wrap:wrap}
+  button{font:inherit;font-size:13.5px;padding:9px 15px;border-radius:8px;
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;transition:.12s}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .hint{color:var(--muted);font-size:12.5px;margin-top:10px}
+  input[type=text],.fix-before,.fix-after{font:inherit;font-size:13.5px;padding:8px 11px;
+    border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit}
+  tr.muted td{color:var(--muted);text-decoration:line-through}
+  tr.muted td:last-child{text-decoration:none}
+  tr.muted td .st{text-decoration:none}   /* strike the fix, not its status chip */
+
+  /* One section per document, so each verdict bar sticks within its own document rather
+     than piling up on the one above it. */
+  .doc + .doc{margin-top:26px;border-top:1px solid var(--line);padding-top:20px}
+  .doc > h3{margin:0 0 12px;font-size:14px;font-weight:650}
+
+  /* !important because .pane.on is the more specific selector: a pane that is not
+     available yet must stay hidden even while it is the selected one. */
+  .hidden{display:none !important}
+
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+      transition-duration:.01ms !important}
+    .rail{position:static}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Financial Statement Agent</h1>
+      <div class="tagline">
+        Extracts the whole statement &mdash; every line item and every segment column &mdash;
+        then proves it by reconciling against the document&rsquo;s own arithmetic.
+      </div>
+    </div>
+    <div class="pills">
+      <span class="pill"><span class="dot" id="d-idp"></span><span id="t-idp">parser…</span></span>
+      <span class="pill"><span class="dot" id="d-model"></span><span id="t-model">model…</span></span>
+      <span class="pill"><span class="dot" id="d-blob"></span><span id="t-blob">storage…</span></span>
+      <span class="pill"><span class="dot on"></span><span id="t-user">…</span></span>
+      <button class="pill" id="signout" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <div class="app">
+
+  <nav class="rail" id="rail" aria-label="Review steps">
+    <button data-pane="upload" aria-current="page">
+      <span class="mark" id="m-upload" title="ready">&#9675;</span>Upload</button>
+    <button data-pane="agent" disabled>
+      <span class="mark" id="m-agent" title="not started">&#9675;</span>Agent</button>
+    <button data-pane="result" disabled>
+      <span class="mark" id="m-result" title="not started">&#9675;</span>Result</button>
+    <button data-pane="download" disabled>
+      <span class="mark" id="m-download" title="not started">&#9675;</span>Download</button>
+    <button data-pane="memory">
+      <span class="mark" id="m-memory" title="ready">&#9675;</span>Learned</button>
+  </nav>
+
+  <main class="main">
+
+  <div class="card pane on" data-pane="upload">
+    <h2>Upload</h2>
+    <div id="drop">
+      <strong>Drop a financial statement PDF</strong>
+      <span>drop the whole deal pack &mdash; every document is parsed at the same time</span>
+    </div>
+    <input type="file" id="file" accept="application/pdf" multiple>
+    <div class="btns" style="margin-top:13px;align-items:center">
+      <button class="primary" id="run" disabled>Extract &amp; reconcile all</button>
+      <button id="clear" disabled>Clear</button>
+    </div>
+    <div class="hint" id="queue-hint">No files selected.</div>
+  </div>
+
+  <div class="card pane hidden" id="c-status" data-pane="agent">
+    <h2>Agent</h2>
+    <div id="rows"></div>
+  </div>
+
+  <div class="card pane hidden" id="c-result" data-pane="result">
+    <h2>Result</h2>
+    <div id="result"></div>
+  </div>
+
+  <div class="card pane hidden" id="c-download" data-pane="download">
+    <h2>Download</h2>
+    <div class="btns">
+      <button class="primary" data-fmt="excel">Excel workbook</button>
+      <button data-fmt="csv">CSV</button>
+      <button data-fmt="json">JSON</button>
+    </div>
+    <div class="hint" id="dl-hint">
+      One sheet per table, an Exceptions sheet listing only what needs review, an
+      Audit sheet recording every change made and the authority it was made under, and a
+      Provenance sheet tracing every figure to the page and row it was printed on.
+    </div>
+  </div>
+
+  <div class="card pane" id="c-memory" data-pane="memory">
+    <h2>What the agent has learned</h2>
+    <div class="hint" style="margin-bottom:10px">
+      Approving a fix once applies it to every future document with the same layout.
+      Anything here can be withdrawn &mdash; it then stops applying, without altering
+      documents already produced.
+    </div>
+    <div id="memory">Loading&hellip;</div>
+  </div>
+
+  </main>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const drop = $('#drop'), fileInput = $('#file');
+let queue = [];
+
+// ---- session ------------------------------------------------------------
+// A lapsed session shows up as a 401 on whichever panel happens to refresh first.
+// Intercepting it once here means the page returns to sign-in instead of each panel
+// rendering its own "could not load" for what is really one cause.
+const rawFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await rawFetch(...args);
+  if (res.status === 401 && !String(args[0] || '').includes('/auth/'))
+    location.href = '/login?next=' + encodeURIComponent(location.pathname);
+  return res;
+};
+
+fetch('/auth/me').then(r => r.ok ? r.json() : null).then(me => {
+  if (me) $('#t-user').textContent = me.name;
+}).catch(() => {});
+
+$('#signout').addEventListener('click', async () => {
+  try { await fetch('/auth/logout', {method: 'POST'}); } catch {}
+  location.href = '/login';
+});
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = v => v == null ? '—' :
+  Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+
+// ---- panes --------------------------------------------------------------
+// The rail is navigation, not state: `.hidden` on a pane still means "the run has not
+// produced this yet", exactly as the renderers have always used it, and that alone
+// decides whether its rail button is reachable.
+function showPane(name){
+  for (const p of document.querySelectorAll('.pane'))
+    p.classList.toggle('on', p.dataset.pane === name);
+  for (const b of document.querySelectorAll('#rail button')){
+    if (b.dataset.pane === name) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  }
+}
+
+const MARK = {pending:['○','not started'], busy:['●','in progress'],
+              done:['✓','done'], ready:['○','ready']};
+
+function setMark(id, state){
+  const el = $('#m-' + id);
+  if (!el) return;
+  const [glyph, title] = MARK[state];
+  el.textContent = glyph;
+  el.title = title;                        // the word, not just the colour
+  el.className = 'mark' + (state === 'done' ? ' done' : state === 'busy' ? ' busy' : '');
+}
+
+function updateRail(){
+  const anyRun  = queue.some(q => q.status === 'run');
+  const anyDone = queue.some(q => q.status === 'done');
+  const settled = queue.length > 0 && queue.every(q => q.status === 'done' || q.status === 'fail');
+
+  setMark('upload', queue.length ? 'done' : 'ready');
+  setMark('agent', anyRun ? 'busy' : settled ? 'done' : 'pending');
+  setMark('result', anyDone ? 'done' : anyRun ? 'busy' : 'pending');
+  setMark('download', anyDone ? 'done' : 'pending');
+
+  for (const b of document.querySelectorAll('#rail button')){
+    const pane = document.querySelector(`.pane[data-pane="${b.dataset.pane}"]`);
+    b.disabled = !pane || pane.classList.contains('hidden');
+  }
+  // Move the reviewer on once there is something to review, but only the first time -
+  // after that, wherever they navigated to is where they stay.
+  if (anyDone && !updateRail.advanced){ updateRail.advanced = true; showPane('result'); }
+}
+
+$('#rail').addEventListener('click', ev => {
+  const b = ev.target.closest('button[data-pane]');
+  if (b && !b.disabled) showPane(b.dataset.pane);
+});
+updateRail();
+
+// ---- health -------------------------------------------------------------
+fetch('/health').then(r => r.json()).then(h => {
+  $('#t-model').textContent = h.model_deployment || 'unknown';
+  $('#d-model').className = 'dot ' + (h.azure_openai_configured ? 'on' : 'off');
+  $('#t-blob').textContent = h.blob_configured ? 'blob connected' : 'blob off';
+  $('#d-blob').className = 'dot ' + (h.blob_configured ? 'on' : 'off');
+  try {
+    $('#t-idp').textContent = 'IDP ' + new URL(h.idp_base_url).hostname.split('.')[0];
+  } catch { $('#t-idp').textContent = 'IDP'; }
+  $('#d-idp').className = 'dot on';
+}).catch(() => {
+  $('#t-model').textContent = 'API unreachable';
+  $('#d-model').className = 'dot off';
+});
+
+// ---- selection ----------------------------------------------------------
+drop.addEventListener('click', () => fileInput.click());
+['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.add('hot');
+}));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.remove('hot');
+}));
+drop.addEventListener('drop', ev => add(ev.dataTransfer.files));
+fileInput.addEventListener('change', () => add(fileInput.files));
+
+function add(list){
+  const incoming = [...list].filter(f =>
+    f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  const skipped = list.length - incoming.length;
+  for (const f of incoming){
+    if (!queue.some(q => q.file.name === f.name && q.file.size === f.size))
+      queue.push({file:f, status:'wait'});
+  }
+  fileInput.value = '';
+  renderRows();
+  $('#run').disabled = !queue.some(q => q.status === 'wait');
+  $('#clear').disabled = queue.length === 0;
+  $('#queue-hint').textContent = queue.length
+    ? `${queue.length} file${queue.length > 1 ? 's' : ''} queued`
+      + (skipped ? ` · ${skipped} non-PDF skipped` : '')
+    : 'No files selected.';
+}
+
+$('#clear').addEventListener('click', () => {
+  queue = []; renderRows();
+  ['#c-status','#c-result','#c-download'].forEach(s => $(s).classList.add('hidden'));
+  $('#run').disabled = true; $('#clear').disabled = true;
+  $('#queue-hint').textContent = 'No files selected.';
+  updateRail.advanced = false;
+  showPane('upload'); updateRail();
+});
+
+// ---- verdict ------------------------------------------------------------
+// Reconciliation status alone cannot say whether a document is clean: nine checks that
+// tie over 846 figures is not a clean document. Every renderer keys off this one
+// function so the chip, the banner and the metrics can never tell different stories.
+// A record written before coverage tracking existed has no coverage block, and an
+// unknown coverage is not a proven one - it reads as partial, never as clean.
+function verdict(rec){
+  if (rec.failed) return 'exception';
+  if (!rec.coverage || rec.coverage.unchecked > 0) return 'partial';
+  return 'clean';
+}
+
+// "9 of 846 figures (1.1%)" - or an honest dash when the record predates coverage.
+function coverageText(rec){
+  const cov = rec.coverage;
+  if (!cov) return 'coverage unknown for this record';
+  return `${cov.verified} of ${cov.figures} figures (${cov.coverage_pct}%)`;
+}
+
+// ---- status rows --------------------------------------------------------
+function renderRows(){
+  const box = $('#rows');
+  if (!queue.length){ box.innerHTML = ''; updateRail(); return; }
+  $('#c-status').classList.remove('hidden');
+
+  // Five cells per row, always, in the same order - an empty cell where a file has
+  // nothing to report. That is what makes the columns line up down the list.
+  box.innerHTML = queue.map(q => {
+    const rec = q.res?.reconciliation || {}, ex = q.res?.extracted || {};
+    let chip = '', figures = '', rows = '', engine = '';
+
+    if (q.status === 'wait') chip = `<span class="chip wait">queued</span>`;
+    else if (q.status === 'run')
+      chip = `<span class="chip run"><span class="spin"></span>${esc(q.step || 'working')}</span>`;
+    else if (q.status === 'fail') chip = `<span class="chip fail">failed</span>`;
+    else {
+      const v = verdict(rec);
+      chip = v === 'clean'
+        ? `<span class="chip done">every figure verified</span>`
+        : v === 'partial'
+          ? `<span class="chip exc">${esc(coverageText(rec))} verified</span>`
+          : `<span class="chip exc">${rec.failed} exception${rec.failed === 1 ? '' : 's'} · ${esc(coverageText(rec))} verified</span>`;
+      figures = `${ex.figures ?? '—'} figures`;
+      rows = `${ex.rows ?? '—'} rows`;
+      const rounds = q.res?.agent?.repairs?.length || 0;
+      engine = [q.res?.parsing_engine, rounds ? `${rounds} repair${rounds === 1 ? '' : 's'}` : '']
+        .filter(Boolean).map(t => `<span class="chip info">${esc(t)}</span>`).join(' ');
+    }
+
+    return `<div class="row">
+      <div>
+        <div class="fname" title="${esc(q.file.name)}">${esc(q.file.name)}</div>
+        <div class="fsize">${(q.file.size/1024).toFixed(0)} KB</div>
+      </div>
+      <div>${chip}</div>
+      <div class="num-cell">${figures}</div>
+      <div class="num-cell">${rows}</div>
+      <div>${engine}</div>
+      ${q.error ? `<div class="err-detail" style="grid-column:1/-1">${esc(q.error)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  updateRail();
+}
+
+// ---- result -------------------------------------------------------------
+function renderResult(){
+  const done = queue.filter(q => q.status === 'done' && q.res);
+  if (!done.length){ $('#c-result').classList.add('hidden'); return; }
+  $('#c-result').classList.remove('hidden');
+  $('#c-download').classList.remove('hidden');
+
+  $('#result').innerHTML = done.map(q => {
+    const r = q.res, rec = r.reconciliation || {}, ex = r.extracted || {},
+          meta = r.interpretation || {}, agent = r.agent || {};
+
+    const v = verdict(rec), cov = rec.coverage;
+
+    // Only the clean state may claim the document needs no manual verification. The
+    // partial state is the common one and says plainly what was not proven, because a
+    // green banner over 1.1% coverage is the one claim this project cannot defend.
+    const banner = v === 'clean'
+      ? `<div class="banner ok"><b>Reconciled.</b> All ${rec.total} arithmetic checks tie,
+           and every figure is covered by one.
+           <span class="sub">Every subtotal, segment cross-foot and accounting identity
+           agrees with the document. Nothing needs manual verification.</span></div>`
+      : v === 'partial'
+        ? `<div class="banner part"><b>No exceptions &mdash; but this is not a clean
+             document.</b> ${esc(coverageText(rec))} are covered by an arithmetic check.
+             <span class="sub">The other ${cov ? cov.unchecked : ex.figures} figures have not
+             been proven either way: no arithmetic in this document constrains them. Open
+             Provenance below and filter to <b>Not covered</b> to see which.</span></div>`
+        : `<div class="banner exc"><b>${rec.failed} exception${rec.failed === 1 ? '' : 's'}
+             to review</b> &mdash; the other ${rec.passed} checks tie.
+             <span class="sub">Checks cover ${esc(coverageText(rec))}; the rest are not
+             constrained by any arithmetic, so the exceptions below are the reviewed
+             failures, not the whole risk.</span></div>`;
+
+    // Every card emits all three slots - the empty .pct included - so the labels sit on
+    // one line across the strip instead of the one card with a percentage dropping its own.
+    const metrics = `<div class="metrics">
+      <div class="metric"><div class="v">${ex.figures ?? '—'}</div>
+        <div class="pct"></div><div class="k">figures extracted</div></div>
+      <div class="metric"><div class="v">${ex.rows ?? '—'}</div>
+        <div class="pct"></div><div class="k">line items</div></div>
+      <div class="metric"><div class="v">${(ex.columns || []).length}</div>
+        <div class="pct"></div><div class="k">columns</div></div>
+      <div class="metric"><div class="v">${rec.passed ?? 0}/${rec.total ?? 0}</div>
+        <div class="pct"></div><div class="k">checks tie</div></div>
+      <div class="metric${v === 'clean' ? '' : ' short'}">
+        <div class="v">${cov ? `${cov.verified}/${cov.figures}` : '—'}</div>
+        <div class="pct">${cov ? `${cov.coverage_pct}% covered` : 'coverage unknown'}</div>
+        <div class="k">figures verified</div></div>
+    </div>`;
+
+    const metaBits = [meta.company, meta.report_title, meta.period_label,
+                      meta.currency, meta.units && ('in ' + meta.units),
+                      meta.basis, meta.segmentation].filter(Boolean);
+
+    const exceptions = (rec.exceptions || []).length ? `
+      <div class="tblwrap" style="margin-bottom:12px"><table>
+        <thead><tr><th>Exception</th><th class="num">Document states</th>
+          <th class="num">Figures add to</th>
+          <th class="num">Difference</th><th>Where</th></tr></thead>
+        <tbody>${rec.exceptions.map(c => `<tr class="bad">
+          <td>${esc(c.description)}</td>
+          <td class="num">${money(c.printed)}</td>
+          <td class="num">${money(c.computed)}</td>
+          <td class="num">${money(c.delta)}</td>
+          <td>${esc(c.location)}</td></tr>`).join('')}</tbody>
+      </table></div>` : '';
+
+    // A fix this result relied on has since been withdrawn. Withdrawing stops a rule
+    // applying to future documents - it does nothing to results already on screen,
+    // so without this the figures here would silently disagree with what Learned now
+    // says is correct.
+    const stale = q.stale ? `
+      <div class="stale">
+        <b>This result used a fix that has since been withdrawn</b>
+        ${esc(q.stale.description)}
+        <div class="sub">The figures above still reflect it. Re-running reprocesses this
+          document with the rules approved right now; this result stays exactly as it
+          is, at its own job, if you would rather keep it.</div>
+        <button data-rerun="${esc(r.job_id)}">Re-run without this fix</button>
+      </div>` : '';
+
+    // fixes reused from an earlier approval - nobody was asked
+    const learned = (agent.applied_rules || []).length ? `
+      <div class="learned">&#10003; ${agent.applied_rules.length} previously-approved
+        fix${agent.applied_rules.length === 1 ? '' : 'es'} applied automatically
+        (${agent.applied_rules.reduce((n, r) => n + (r.rows_changed || 0), 0)} rows)
+        &mdash; no review needed.</div>` : '';
+
+    // computed but unapproved: one click makes it permanent for this layout
+    const proposals = (agent.proposals || []).map(p => `
+      <div class="prop" data-pid="${esc(p.id)}">
+        <h4>${esc(p.description)}</h4>
+        <div class="why">${esc(p.evidence)}</div>
+        ${(p.examples || []).length ? `<div class="ex">${
+          p.examples.map(e =>
+            `p${esc(e.page)} row ${esc(e.row)}   ${esc(e.original)}` +
+            `\n            → ${esc(e.left)}  |  ${esc(e.right)}`).join('\n')
+        }</div>` : ''}
+        <div class="btns">
+          <button class="primary" data-approve="${esc(p.id)}" data-job="${esc(r.job_id)}">
+            Apply to all ${p.affected_rows} rows &amp; remember
+          </button>
+          <button data-skip="${esc(p.id)}">Skip</button>
+        </div>
+        <div class="once">Approving once means every future document with this column
+          layout is corrected automatically.</div>
+      </div>`).join('');
+
+    // deliberately not auto-corrected
+    const reported = (agent.findings || []).map(f => `
+      <div class="reported">
+        <b>Reported, not changed</b>${esc(f.description)}
+        <div class="imp">${esc(f.impact || '')}</div>
+      </div>`).join('');
+
+    const repairs = (agent.repairs || []).length ? `
+      <details><summary>${agent.repairs.length} arithmetic repair${agent.repairs.length === 1 ? '' : 's'}
+        applied automatically &mdash; each kept only because it reduced exceptions</summary>
+        <div class="details-body"><table>
+          <thead><tr><th>Strategy</th><th>Change</th><th>Why accepted</th></tr></thead>
+          <tbody>${agent.repairs.map(x => `<tr>
+            <td>${esc(x.strategy)}</td><td>${esc(x.description)}</td>
+            <td>${esc(x.evidence)}</td></tr>`).join('')}</tbody>
+        </table></div></details>` : '';
+
+    const tree = (r.hierarchy_preview || []).length ? `
+      <details><summary>Recovered hierarchy &mdash; derived from row labels, no coordinates</summary>
+        <div class="details-body"><pre>${esc(r.hierarchy_preview.join('\n'))}</pre></div>
+      </details>` : '';
+
+    const trace = (agent.trace || []).length ? `
+      <details><summary>Agent trace</summary>
+        <div class="details-body"><pre>${esc(agent.trace.join('\n'))}</pre></div>
+      </details>` : '';
+
+    // The other direction: the analyst fixes something the agent never questioned.
+    // Only wording is learnable - a figure means something different next month.
+    const correct = `
+      <details><summary>Correct a label the parser got wrong</summary>
+        <div class="details-body">
+          <div class="hint" style="margin-bottom:8px">Corrected once and remembered for
+            this layout, so it does not need correcting again next month. Figures are
+            not correctable here &mdash; they are proven by arithmetic, not by typing.</div>
+          <div class="btns" style="flex-wrap:wrap;align-items:center">
+            <input class="fix-before" placeholder="reads (exactly as shown)" style="min-width:230px">
+            <span>&rarr;</span>
+            <input class="fix-after" placeholder="should read" style="min-width:230px">
+            <button data-correct="${esc(r.job_id)}">Correct &amp; remember</button>
+          </div>
+          <div class="fix-msg hint" style="margin-top:8px"></div>
+        </div>
+      </details>`;
+
+    // Loaded on open rather than up front: a large pack has thousands of figures, and
+    // nobody opening the page is waiting on them.
+    const prov = r.job_id ? `
+      <details class="prov-block" data-job="${esc(r.job_id)}">
+        <summary>Provenance &mdash; click any figure to see where it came from</summary>
+        <div class="details-body"><div class="prov-mount hint">Loading&hellip;</div></div>
+      </details>` : '';
+
+    return `<section class="doc">
+        <h3>${esc(q.file.name)}</h3>
+        <div class="verdictbar">${banner}</div>`
+      + metrics
+      + (metaBits.length ? `<div class="hint" style="margin:-4px 0 12px">${esc(metaBits.join(' · '))}</div>` : '')
+      + stale + learned + exceptions + proposals + reported + repairs + tree + prov + correct + trace
+      + `</section>`;
+  }).join('');
+
+  updateRail();
+}
+
+// ---- provenance ---------------------------------------------------------
+// The claim this project makes is that no figure is unciteable. This is where that
+// claim is put in front of the person who has to defend it: pick any figure and see
+// the page it was printed on, the characters the document used, and the arithmetic
+// that covers it. Nothing here was produced by a model.
+
+const provState = new Map();   // job_id -> {summary, citations, filter, picked}
+
+const STATUS_TEXT = {
+  ties: 'Verified',
+  exception: 'Exception',
+  unchecked: 'Not covered',
+};
+
+async function loadProvenance(block){
+  const job = block.dataset.job;
+  const mount = block.querySelector('.prov-mount');
+  try {
+    const res = await fetch(`/api/provenance/${encodeURIComponent(job)}`);
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    provState.set(job, {...data, filter: 'all', picked: 0});
+    renderProvenance(job, mount);
+  } catch (err) {
+    block.dataset.loaded = '';   // let a retry happen on the next open
+    mount.className = 'prov-mount hint';
+    mount.textContent = `Provenance is unavailable for this job: ${err.message}`;
+  }
+}
+
+function renderProvenance(job, mount){
+  const st = provState.get(job);
+  if (!st) return;
+  const s = st.summary || {};
+  const shown = st.filter === 'all'
+    ? st.citations
+    : st.citations.filter(c => c.status === st.filter);
+
+  if (st.picked >= shown.length) st.picked = 0;
+
+  const counts = {all: st.citations.length, exception: s.exceptions || 0,
+                  ties: s.ties || 0, unchecked: s.unchecked || 0};
+  const filters = ['all', 'exception', 'ties', 'unchecked'].map(f => `
+    <button data-filter="${f}" class="${st.filter === f ? 'on' : ''}">
+      ${f === 'all' ? 'All figures' : esc(STATUS_TEXT[f])} (${counts[f]})
+    </button>`).join('');
+
+  const rows = shown.map((c, i) => `
+    <tr data-i="${i}" class="${i === st.picked ? 'picked' : ''}">
+      <td>${esc(String(c.page))}</td>
+      <td>${esc(c.row_label)}</td>
+      <td>${esc(c.column)}</td>
+      <td class="printed">${esc(c.printed)}</td>
+      <td><span class="st ${esc(c.status)}">${esc(STATUS_TEXT[c.status] || c.status)}</span></td>
+    </tr>`).join('');
+
+  mount.className = 'prov-mount';
+  mount.innerHTML = `
+    <div class="hint" style="margin-bottom:9px">
+      ${s.cited ?? 0} of ${s.figures ?? 0} figures trace back to a page, a row and the
+      text the document printed. Every figure below was moved by deterministic code
+      &mdash; no model touched a number.
+    </div>
+    <div class="prov-filters">${filters}</div>
+    <div class="prov">
+      <div class="tblwrap"><table>
+        <colgroup><col class="c-page"><col><col class="c-col">
+          <col class="c-printed"><col class="c-status"></colgroup>
+        <thead><tr><th>Page</th><th>Row</th><th>Column</th>
+          <th>As printed</th><th>Status</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5">Nothing in this category.</td></tr>'}</tbody>
+      </table></div>
+      <div class="proof">${proofPanel(st, shown[st.picked])}</div>
+    </div>`;
+}
+
+function proofPanel(st, c){
+  if (!c) return '<div class="empty">No figure selected.</div>';
+
+  const verdictText = c.status === 'exception'
+    ? `<b>Does not tie.</b> Out by ${money(c.out_by)} against the document's own
+       arithmetic.`
+    : c.status === 'ties'
+      ? '<b>Verified.</b> This figure is consistent with the figures around it.'
+      : `<b>Not covered by a check.</b> No arithmetic in this document constrains this
+         figure, so it has not been proven either way &mdash; this is not a pass.`;
+
+  const checks = (c.checks || []).length
+    ? `<ul>${c.checks.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+
+  const repairs = (c.repairs || []).length
+    ? `<dt>Repaired</dt><dd>${esc(c.repairs.join('; '))}</dd>` : '';
+
+  return `
+    <h4>${esc(c.row_label)}</h4>
+    <div class="where">${esc(st.file_name || '')} &middot; page ${esc(String(c.page))}
+      &middot; ${esc(c.sheet || 'worksheet')} &middot; column ${esc(c.column)}</div>
+    <dl>
+      <dt>As printed</dt><dd class="mono">${esc(c.printed)}</dd>
+      <dt>Value</dt><dd class="mono">${money(c.value)}</dd>
+      <dt>Row</dt><dd>${esc(String(c.row_index + 1))}</dd>
+      ${repairs}
+      <dt>Parser</dt><dd>${esc(st.parsing_engine || 'Evalueserve IDP')}</dd>
+      <dt>Source</dt><dd class="mono">${esc(st.source_blob || '—')}</dd>
+    </dl>
+    <div class="verdict ${esc(c.status)}">${verdictText}${checks}</div>`;
+}
+
+// `toggle` does not bubble, so this listens in the capture phase rather than attaching
+// a handler to every block on every re-render.
+document.addEventListener('toggle', (e) => {
+  const block = e.target;
+  if (!block.classList || !block.classList.contains('prov-block')) return;
+  if (!block.open || block.dataset.loaded) return;
+  block.dataset.loaded = '1';
+  loadProvenance(block);
+}, true);
+
+document.addEventListener('click', (e) => {
+  const block = e.target.closest && e.target.closest('.prov-block');
+  if (!block) return;
+  const job = block.dataset.job;
+  const mount = block.querySelector('.prov-mount');
+  const st = provState.get(job);
+  if (!st) return;
+
+  const filter = e.target.closest('[data-filter]');
+  if (filter){ st.filter = filter.dataset.filter; st.picked = 0; renderProvenance(job, mount); return; }
+
+  const row = e.target.closest('tr[data-i]');
+  if (row){ st.picked = Number(row.dataset.i); renderProvenance(job, mount); }
+});
+
+// ---- learned rules, and withdrawing one ---------------------------------
+// Approve-once is only safe if it can be undone: a wrong rule would otherwise keep
+// correcting every future document silently.
+// The layout arrives as the shape the fix was detected on - {document, label_header,
+// columns} - not a string, so interpolating it directly printed "[object Object]".
+// Name it by the document it was learned from and how wide that table is, which is what
+// actually distinguishes one ERP template from another at a glance.
+function layoutLabel(L){
+  const o = L.layout;
+  if (!o || typeof o !== 'object') return o || 'Layout';
+  const n = (o.columns || []).length;
+  return [o.document || o.label_header || 'Layout',
+          n ? `${n} column${n === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+}
+
+async function loadMemory(){
+  const box = $('#memory');
+  try {
+    const res = await fetch('/api/rules');
+    if (!res.ok) throw new Error(await res.text());
+    const j = await res.json();
+    if (!j.learned || !j.learned.length){
+      box.innerHTML = '<div class="hint">Nothing learned yet. Approve a fix and it appears here.</div>';
+      return;
+    }
+    const goneCount = j.learned.reduce((n, L) => n + (L.revoked || []).length, 0);
+    // Each layout is a group of rows in the one table, so "Times used" sits in the same
+    // column whichever layout it belongs to.
+    const groups = j.learned.map(L => {
+      const head = `<tr class="group"><td colspan="5">${esc(layoutLabel(L))}
+        <span class="fp">${esc(L.fingerprint || '')}</span></td></tr>`;
+
+      const active = (L.rules || []).map(x => `<tr>
+        <td>${esc(x.description || x.kind)}</td>
+        <td>${esc(x.approved_by || '—')}${x.approved_at ? ' · ' + esc(String(x.approved_at).slice(0,10)) : ''}</td>
+        <td class="num">${x.times_applied || 0}</td>
+        <td><span class="st ties">Active</span></td>
+        <td class="act"><button data-revoke="${esc(x.id)}" data-fp="${esc(L.fingerprint)}">Withdraw</button></td>
+      </tr>`).join('');
+
+      const gone = (L.revoked || []).map(x => `<tr class="muted gone">
+        <td>${esc(x.description || x.kind)}</td>
+        <td>${esc(x.revoked_by || '—')}${x.revoked_at ? ' · ' + esc(String(x.revoked_at).slice(0,10)) : ''}</td>
+        <td class="num">${x.times_applied || 0}</td>
+        <td><span class="st unchecked">Withdrawn</span></td>
+        <td class="act"><span class="none">—</span></td>
+      </tr>`).join('');
+
+      // With the withdrawn rows collapsed, a layout whose every fix was withdrawn would
+      // otherwise render as a heading with nothing under it.
+      const allGone = (!active && gone)
+        ? `<tr class="gone-note"><td colspan="5" class="hint">Every fix for this layout
+             has been withdrawn.</td></tr>` : '';
+      const empty = (!active && !gone)
+        ? `<tr><td colspan="5" class="hint">Nothing learned for this layout yet.</td></tr>` : '';
+      return head + active + allGone + gone + empty;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="hint" style="margin-bottom:10px">${j.rules} fix${j.rules === 1 ? '' : 'es'}
+        across ${j.layouts} layout${j.layouts === 1 ? '' : 's'}, reused
+        ${j.total_reuses} time${j.total_reuses === 1 ? '' : 's'} without anyone being asked.${
+        goneCount ? ` <button class="lnk" id="gone-toggle" aria-expanded="false"
+          aria-controls="learned-tbl">Show ${goneCount} withdrawn</button>` : ''}</div>
+      <div class="tblwrap"><table class="learned-tbl" id="learned-tbl">
+        <colgroup><col><col class="c-by"><col class="c-used">
+          <col class="c-status"><col class="c-act"></colgroup>
+        <thead><tr><th>Fix</th><th>Authority</th><th class="num">Times used</th>
+          <th>Status</th><th>Action</th></tr></thead>
+        <tbody>${groups}</tbody>
+      </table></div>`;
+  } catch (err){
+    box.innerHTML = `<div class="hint">Could not load: ${esc(err.message || err)}</div>`;
+  }
+}
+loadMemory();
+
+$('#memory').addEventListener('click', async ev => {
+  const toggle = ev.target.closest('#gone-toggle');
+  if (toggle){
+    const tbl = $('#learned-tbl');
+    const showing = tbl.classList.toggle('show-gone');
+    toggle.setAttribute('aria-expanded', String(showing));
+    const n = tbl.querySelectorAll('tr.gone').length;
+    toggle.textContent = showing ? `Hide ${n} withdrawn` : `Show ${n} withdrawn`;
+    return;
+  }
+
+  const btn = ev.target.closest('button[data-revoke]');
+  if (!btn) return;
+  if (!confirm('Withdraw this fix? It stops applying to new documents. Files already produced are unchanged.')) return;
+  btn.disabled = true; btn.textContent = 'Withdrawing…';
+  try {
+    const res = await fetch(
+      `/api/rules/${encodeURIComponent(btn.dataset.fp)}/${encodeURIComponent(btn.dataset.revoke)}`,
+      {method:'DELETE'});
+    if (!res.ok){
+      let d = await res.text(); try { d = JSON.parse(d).detail || d; } catch {}
+      throw new Error(d);
+    }
+    loadMemory();
+    markStale(btn.dataset.revoke);
+  } catch (err){
+    btn.disabled = false; btn.textContent = 'Withdraw';
+    alert('Could not withdraw: ' + (err.message || err));
+  }
+});
+
+// A withdrawn rule stops applying to future documents; it does not touch a result
+// already on screen. Checked only against jobs this browser session still holds -
+// there is no job history to search beyond that, so a job from an earlier session or
+// a different analyst is not covered by this.
+function markStale(ruleId){
+  let changed = false;
+  for (const q of queue){
+    if (q.status !== 'done' || !q.res || q.stale) continue;
+    const rule = (q.res.agent?.applied_rules || []).find(r => r.id === ruleId);
+    if (rule){
+      q.stale = {description: rule.description || rule.kind};
+      changed = true;
+    }
+  }
+  if (changed) renderResult();
+}
+
+// ---- approve a proposed fix ---------------------------------------------
+$('#result').addEventListener('click', async ev => {
+  const skip = ev.target.closest('button[data-skip]');
+  if (skip){ skip.closest('.prop').remove(); return; }
+
+  // Reprocess this one document with the rules approved right now. The original result
+  // is not touched - it stays findable at its own job_id - this replaces only what the
+  // browser is showing for it.
+  const rerunBtn = ev.target.closest('button[data-rerun]');
+  if (rerunBtn){
+    const oldJobId = rerunBtn.dataset.rerun;
+    const q = queue.find(x => x.job_id === oldJobId);
+    if (!q) return;
+    rerunBtn.disabled = true; rerunBtn.textContent = 'Re-running…';
+    try {
+      const res = await fetch('/api/rerun', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({job_id: oldJobId}),
+      });
+      if (!res.ok){
+        let d = await res.text(); try { d = JSON.parse(d).detail || d; } catch {}
+        throw new Error(d);
+      }
+      const fresh = await res.json();
+      q.job_id = fresh.job_id;
+      q.res = fresh;
+      delete q.stale;
+      renderResult();
+    } catch (err){
+      rerunBtn.disabled = false; rerunBtn.textContent = 'Re-run without this fix';
+      alert('Could not re-run: ' + (err.message || err));
+    }
+    return;
+  }
+
+  // a correction typed by the analyst, learned for this layout
+  const fix = ev.target.closest('button[data-correct]');
+  if (fix){
+    const body = fix.closest('.details-body');
+    const before = body.querySelector('.fix-before').value.trim();
+    const after  = body.querySelector('.fix-after').value.trim();
+    const msg    = body.querySelector('.fix-msg');
+    if (!before || !after){ msg.textContent = 'Both values are needed.'; return; }
+    fix.disabled = true; msg.textContent = 'Saving…';
+    try {
+      const res = await fetch('/api/rules/correct', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          job_id: fix.dataset.correct, kind: 'relabel_row', before, after
+        })
+      });
+      if (!res.ok){
+        let d = await res.text(); try { d = JSON.parse(d).detail || d; } catch {}
+        throw new Error(d);
+      }
+      const j = await res.json();
+      msg.textContent = j.effect;
+      loadMemory();
+    } catch (err){
+      msg.textContent = 'Could not save: ' + (err.message || err);
+    }
+    fix.disabled = false;
+    return;
+  }
+
+  const btn = ev.target.closest('button[data-approve]');
+  if (!btn) return;
+
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/rules/approve', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        job_id: btn.dataset.job,
+        proposal_id: btn.dataset.approve,
+        ...(btn.dataset.choice ? {choice: btn.dataset.choice} : {})
+      })
+    });
+    if (!res.ok){
+      let d = await res.text(); try { d = JSON.parse(d).detail || d; } catch {}
+      throw new Error(d);
+    }
+    const j = await res.json();
+    const card = btn.closest('.prop');
+    card.style.borderLeftColor = 'var(--ok)';
+    card.innerHTML = `<h4>&#10003; Applied to ${j.affected_rows} rows and remembered</h4>
+      <div class="why">${esc(j.effect)}</div>`;
+    loadMemory();
+  } catch (err){
+    btn.disabled = false; btn.textContent = label;
+    alert('Could not save: ' + (err.message || err));
+  }
+});
+
+// ---- run ----------------------------------------------------------------
+// Every file goes to the parser before any of them is waited on, so a pack takes about
+// as long as its slowest document rather than the sum of all of them.
+$('#run').addEventListener('click', async () => {
+  const pending = queue.filter(q => q.status === 'wait');
+  if (!pending.length) return;
+  $('#run').disabled = true; $('#clear').disabled = true;
+
+  const fd = new FormData();
+  for (const q of pending) { fd.append('files', q.file, q.file.name); q.status = 'run'; q.step = 'queueing'; }
+  renderRows();
+  showPane('agent');
+
+  let batchId;
+  try {
+    const res = await fetch('/api/batch', {method: 'POST', body: fd});
+    const txt = await res.text();
+    if (!res.ok) {
+      let msg = txt; try { msg = JSON.parse(txt).detail || txt; } catch {}
+      throw new Error(msg);
+    }
+    batchId = JSON.parse(txt).batch_id;
+  } catch (err) {
+    for (const q of pending) { q.status = 'fail'; q.error = err.message || String(err); }
+    renderRows(); $('#clear').disabled = false; $('#run').disabled = false;
+    return;
+  }
+
+  const byName = new Map(pending.map(q => [q.file.name, q]));
+  while (true) {
+    await new Promise(r => setTimeout(r, 2500));
+    let state;
+    try { state = await (await fetch(`/api/batch/${batchId}`)).json(); }
+    catch { continue; }
+
+    for (const doc of state.documents || []) {
+      const q = byName.get(doc.file_name);
+      if (!q) continue;
+      if (doc.status === 'done') {
+        q.status = 'done';
+        q.job_id = doc.job_id;
+        q.res = {
+          job_id: doc.job_id,
+          parsing_engine: doc.parsing_engine,
+          extracted: {rows: doc.rows, figures: doc.figures, columns: []},
+          reconciliation: doc.reconciliation || {},
+          agent: {
+            repairs: [],
+            // The real list, ids included - needed to tell whether a rule this job used
+            // has since been withdrawn. batch.py used to send only a count.
+            applied_rules: doc.applied_rules || [],
+            proposals: doc.proposals || [],
+            findings: doc.findings || [],
+            trace: [],
+          },
+          interpretation: {},
+          hierarchy_preview: [],
+        };
+      } else if (doc.status === 'failed') {
+        q.status = 'fail'; q.error = doc.error || 'failed';
+      } else {
+        q.step = doc.status === 'submitted' ? 'queued with the parser'
+               : doc.status === 'running' ? 'reconciling' : 'queueing';
+      }
+    }
+    renderRows(); renderResult();
+
+    if (state.status === 'done' || state.status === 'failed') break;
+  }
+
+  $('#clear').disabled = false;
+  $('#run').disabled = !queue.some(q => q.status === 'wait');
+});
+
+// ---- download -----------------------------------------------------------
+$('#c-download').addEventListener('click', async ev => {
+  const btn = ev.target.closest('button[data-fmt]');
+  if (!btn) return;
+  const fmt = btn.dataset.fmt;
+  const job = queue.find(q => q.status === 'done' && q.job_id);
+  if (!job) return;
+
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Building…';
+  try {
+    const res = await fetch('/api/export', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({job_id: job.job_id, format: fmt})
+    });
+    if (!res.ok){
+      let d = await res.text(); try { d = JSON.parse(d).detail || d; } catch {}
+      throw new Error(d);
+    }
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = /filename="?([^"]+)"?/.exec(cd);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = m ? m[1] : `statement.${fmt === 'excel' ? 'xlsx' : fmt}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    const bn = res.headers.get('X-Blob-Name');
+    $('#dl-hint').textContent = bn ? `Saved to blob: ${bn}` : 'Downloaded.';
+  } catch (err){
+    $('#dl-hint').textContent = 'Export failed: ' + (err.message || err);
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+});
+</script>
+</body>
+</html>

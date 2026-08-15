@@ -1,0 +1,15 @@
+fastapi>=0.115.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.0
+pydantic>=2.9.0
+
+# Azure OpenAI is reached through the OpenAI SDK with a custom base_url
+openai>=1.55.0
+
+# Agent orchestration
+langgraph>=0.2.0
+
+# Storage and Excel output
+azure-storage-blob>=12.19.0
+openpyxl>=3.1.2

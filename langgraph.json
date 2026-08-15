@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "financial_extraction": "./app/agent.py:agent"
+  },
+  "env": ".env"
+}
