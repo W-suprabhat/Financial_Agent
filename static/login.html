@@ -89,7 +89,11 @@ const go = document.querySelector('#go');
 // be used to bounce someone to another site off the back of this form.
 function nextPath(){
   const raw = new URLSearchParams(location.search).get('next') || '/';
-  return /^\/(?!\/)/.test(raw) ? raw : '/';
+  // Same-site paths only, so ?next= cannot bounce someone off this form to another
+  // site - and never back to this page, which would land a successful sign-in on the
+  // sign-in form and read as having been signed straight out again.
+  if (!/^\/(?!\/)/.test(raw)) return '/';
+  return /^\/login(\/|\?|#|$)/.test(raw) ? '/' : raw;
 }
 
 form.addEventListener('submit', async ev => {
