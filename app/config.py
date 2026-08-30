@@ -194,8 +194,17 @@ class Settings:
         Unset generates one per process, so sessions do not survive a restart. That is
         the right default: a fixed fallback baked into the source would sign cookies
         anyone with the repo could forge.
+
+        On a serverless host this is not merely inconvenient, it is broken: each instance
+        generates its own, so a cookie signed by one is rejected by the next and the user
+        appears signed out at random. See session_secret_is_ephemeral.
         """
         return os.getenv("APP_SESSION_SECRET") or _EPHEMERAL_SECRET
+
+    @property
+    def session_secret_is_ephemeral(self) -> bool:
+        """True when no APP_SESSION_SECRET was supplied and the per-process one is in use."""
+        return not os.getenv("APP_SESSION_SECRET")
 
 
 settings = Settings()

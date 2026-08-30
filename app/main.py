@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
 logging.getLogger("azure.storage").setLevel(logging.WARNING)
 
+if settings.session_secret_is_ephemeral:
+    logger.warning(
+        "APP_SESSION_SECRET is not set, so session cookies are signed with a key "
+        "generated for this process only. On a serverless host (Vercel) each instance "
+        "generates its own key and will reject cookies issued by the others, so users "
+        "will appear signed out at random. Set APP_SESSION_SECRET to a fixed value."
+    )
+
 app = FastAPI(
     title="Financial Statement Agent",
     description=(

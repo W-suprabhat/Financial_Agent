@@ -20,5 +20,7 @@ venv/
 /spike_output/
 tests/
 
-# Machine-local Claude Code settings (local base URL, local permissions)
-.claude/settings.local.json
+# Claude Code working files - machine-local settings and scratch state, not project code
+.claude/
+
+.vercel

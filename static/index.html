@@ -418,9 +418,15 @@ window.fetch = async (...args) => {
   return res;
 };
 
-fetch('/auth/me').then(r => r.ok ? r.json() : null).then(me => {
-  if (me) $('#t-user').textContent = me.name;
-}).catch(() => {});
+// Deliberately not going through the wrapper's /auth/ exemption: that exemption exists so
+// the login page's own POST cannot loop, but a 401 *here* means the cookie this page was
+// served with is not one the API accepts. Leaving the placeholder in place showed a signed
+// -in-looking header over a session that could not call anything, so say so and go back.
+rawFetch('/auth/me').then(r => r.ok ? r.json() : null).then(me => {
+  if (me && me.name){ $('#t-user').textContent = me.name; return; }
+  $('#t-user').textContent = 'session expired';
+  location.href = '/login?next=' + encodeURIComponent(location.pathname);
+}).catch(() => { $('#t-user').textContent = 'offline'; });
 
 $('#signout').addEventListener('click', async () => {
   try { await fetch('/auth/logout', {method: 'POST'}); } catch {}
