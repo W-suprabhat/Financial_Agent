@@ -38,25 +38,49 @@
   @media (max-width:900px){ .app{grid-template-columns:minmax(0,1fr)} }
   .main{min-width:0}
 
-  .rail{display:flex;flex-direction:column;gap:2px;position:sticky;top:16px}
+  .rail{display:flex;flex-direction:column;position:sticky;top:16px}
   @media (max-width:900px){
-    .rail{position:static;flex-direction:row;overflow-x:auto;gap:6px;
-      padding-bottom:4px;scrollbar-width:thin}
+    .rail{position:static;flex-direction:row;overflow-x:auto;gap:14px;
+      padding-bottom:6px;scrollbar-width:thin}
   }
-  .rail button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
-    padding:9px 11px;border:1px solid transparent;background:transparent;
-    border-radius:8px;font-size:13.5px;color:var(--muted);white-space:nowrap}
-  @media (max-width:900px){ .rail button{width:auto} }
-  .rail button:hover:not(:disabled){background:var(--panel-2);color:var(--ink);
-    border-color:var(--line)}
-  .rail button[aria-current="page"]{background:var(--panel);color:var(--ink);
-    border-color:var(--line);font-weight:600}
-  .rail button:disabled{opacity:.4;cursor:not-allowed}
-  /* State is named in the glyph's title as well as drawn, so it is not colour-only. */
-  .rail .mark{flex:none;width:15px;font-size:12px;text-align:center;
+  /* Numbered stepper: each step is a circled index joined to the next by a spine that
+     fills in once that step is done, so progress reads as a line being drawn rather
+     than five independent dots. */
+  .rail button.step{display:flex;align-items:flex-start;gap:12px;width:100%;
+    text-align:left;padding:0 4px 22px;border:0;background:transparent;color:inherit;
+    font:inherit;cursor:pointer;position:relative}
+  .rail button.step:last-child{padding-bottom:2px}
+  @media (max-width:900px){
+    .rail button.step{width:auto;flex:none;padding:4px 6px 4px 4px}
+    .rail button.step .spine{display:none}
+    .rail button.step .sub{display:none}
+  }
+  .rail button.step:disabled{cursor:not-allowed;opacity:.5}
+  .rail button.step[aria-current="page"] .title{color:var(--accent)}
+  .rail button.step:hover:not(:disabled) .title{color:var(--accent)}
+
+  .rail .node{position:relative;flex:none;display:flex;flex-direction:column;
+    align-items:center}
+  .rail .spine{position:absolute;top:26px;bottom:-22px;width:2px;background:var(--line)}
+  .rail .spine.filled{background:var(--ok)}
+  /* Named in the number's text (1, 2… then a check) as well as drawn, so progress is not
+     colour-only. */
+  .rail .num{flex:none;width:26px;height:26px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:12px;font-weight:700;
+    border:2px solid var(--line);color:var(--muted);background:var(--panel);z-index:1;
     font-variant-numeric:tabular-nums}
-  .rail .mark.done{color:var(--ok)}
-  .rail .mark.busy{color:var(--warn)}
+  .rail button.step.st-done .num{background:var(--ok);border-color:var(--ok);
+    color:var(--accent-ink)}
+  .rail button.step.st-busy .num{border-color:var(--warn);color:var(--warn)}
+  .rail button.step.st-ready .num,
+  .rail button.step.st-pending .num{color:var(--muted)}
+
+  .rail .body{padding-top:2px;min-width:0}
+  .rail .title{display:block;font-size:13.5px;font-weight:600;color:var(--ink)}
+  .rail button.step.st-pending .title{color:var(--muted);font-weight:500}
+  .rail .sub{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+  .rail button.step.st-busy .sub{color:var(--warn)}
+  .rail button.step.st-done .sub{color:var(--ok)}
 
   .pane{display:none}
   .pane.on{display:block}
@@ -92,6 +116,24 @@
   #drop strong{display:block;font-size:15px;margin-bottom:5px}
   #drop span{color:var(--muted);font-size:13px}
   #file{display:none}
+
+  /* Every queued file gets its own chip - naming it is the whole point, since the old
+     "1 file queued" hint left the reviewer unsure which file that was. */
+  .chiplist{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .filechip{display:flex;align-items:center;gap:8px;padding:7px 10px 7px 8px;
+    border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:12.5px}
+  .filechip .ico{flex:none;width:22px;height:22px;border-radius:5px;background:var(--err-bg);
+    color:var(--err);display:flex;align-items:center;justify-content:center;font-size:9px;
+    font-weight:700;font-family:var(--mono)}
+  .filechip .fname{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    color:var(--ink);font-weight:500}
+  .filechip .fsize{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .filechip .chipstatus{font-size:11px;color:var(--muted);white-space:nowrap}
+  .filechip .chipstatus.done{color:var(--ok)}
+  .filechip .chipstatus.fail{color:var(--err)}
+  .filechip .x{flex:none;width:16px;height:16px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;color:var(--muted);cursor:pointer;font-size:11px}
+  .filechip .x:hover{background:var(--err-bg);color:var(--err)}
 
   /* Every file emits the same cells in the same order - empty ones included - so the
      verdict column of one row sits above the verdict column of the next. The old
@@ -335,16 +377,26 @@
   <div class="app">
 
   <nav class="rail" id="rail" aria-label="Review steps">
-    <button data-pane="upload" aria-current="page">
-      <span class="mark" id="m-upload" title="ready">&#9675;</span>Upload</button>
-    <button data-pane="agent" disabled>
-      <span class="mark" id="m-agent" title="not started">&#9675;</span>Agent</button>
-    <button data-pane="result" disabled>
-      <span class="mark" id="m-result" title="not started">&#9675;</span>Result</button>
-    <button data-pane="download" disabled>
-      <span class="mark" id="m-download" title="not started">&#9675;</span>Download</button>
-    <button data-pane="memory">
-      <span class="mark" id="m-memory" title="ready">&#9675;</span>Learned</button>
+    <button class="step" data-pane="upload" aria-current="page">
+      <span class="node"><span class="num" id="m-upload">1</span><span class="spine"></span></span>
+      <span class="body"><span class="title">Upload</span><span class="sub" id="sub-upload">ready</span></span>
+    </button>
+    <button class="step" data-pane="agent" disabled>
+      <span class="node"><span class="num" id="m-agent">2</span><span class="spine"></span></span>
+      <span class="body"><span class="title">Agent</span><span class="sub" id="sub-agent">not started</span></span>
+    </button>
+    <button class="step" data-pane="result" disabled>
+      <span class="node"><span class="num" id="m-result">3</span><span class="spine"></span></span>
+      <span class="body"><span class="title">Result</span><span class="sub" id="sub-result">not started</span></span>
+    </button>
+    <button class="step" data-pane="download" disabled>
+      <span class="node"><span class="num" id="m-download">4</span><span class="spine"></span></span>
+      <span class="body"><span class="title">Download</span><span class="sub" id="sub-download">not started</span></span>
+    </button>
+    <button class="step" data-pane="memory">
+      <span class="node"><span class="num" id="m-memory">5</span></span>
+      <span class="body"><span class="title">Learned</span><span class="sub" id="sub-memory">always open</span></span>
+    </button>
   </nav>
 
   <main class="main">
@@ -356,6 +408,7 @@
       <span>drop the whole deal pack &mdash; every document is parsed at the same time</span>
     </div>
     <input type="file" id="file" accept="application/pdf" multiple>
+    <div class="chiplist" id="chiplist"></div>
     <div class="btns" style="margin-top:13px;align-items:center">
       <button class="primary" id="run" disabled>Extract &amp; reconcile all</button>
       <button id="clear" disabled>Clear</button>
@@ -451,16 +504,20 @@ function showPane(name){
   }
 }
 
-const MARK = {pending:['○','not started'], busy:['●','in progress'],
-              done:['✓','done'], ready:['○','ready']};
+const STEP_NUM = {upload:'1', agent:'2', result:'3', download:'4', memory:'5'};
+const SUB_TEXT = {pending:'not started', busy:'in progress', done:'done', ready:'ready'};
 
-function setMark(id, state){
-  const el = $('#m-' + id);
-  if (!el) return;
-  const [glyph, title] = MARK[state];
-  el.textContent = glyph;
-  el.title = title;                        // the word, not just the colour
-  el.className = 'mark' + (state === 'done' ? ' done' : state === 'busy' ? ' busy' : '');
+function setStep(id, state){
+  const btn = document.querySelector(`.rail button[data-pane="${id}"]`);
+  if (!btn) return;
+  btn.classList.remove('st-pending', 'st-busy', 'st-done', 'st-ready');
+  btn.classList.add('st-' + state);
+  const num = btn.querySelector('.num');
+  num.textContent = state === 'done' ? '✓' : STEP_NUM[id];   // a check, not just a colour
+  const sub = btn.querySelector('.sub');
+  if (sub) sub.textContent = SUB_TEXT[state];
+  const spine = btn.querySelector('.spine');
+  if (spine) spine.classList.toggle('filled', state === 'done');
 }
 
 function updateRail(){
@@ -468,10 +525,10 @@ function updateRail(){
   const anyDone = queue.some(q => q.status === 'done');
   const settled = queue.length > 0 && queue.every(q => q.status === 'done' || q.status === 'fail');
 
-  setMark('upload', queue.length ? 'done' : 'ready');
-  setMark('agent', anyRun ? 'busy' : settled ? 'done' : 'pending');
-  setMark('result', anyDone ? 'done' : anyRun ? 'busy' : 'pending');
-  setMark('download', anyDone ? 'done' : 'pending');
+  setStep('upload', queue.length ? 'done' : 'ready');
+  setStep('agent', anyRun ? 'busy' : settled ? 'done' : 'pending');
+  setStep('result', anyDone ? 'done' : anyRun ? 'busy' : 'pending');
+  setStep('download', anyDone ? 'done' : 'pending');
 
   for (const b of document.querySelectorAll('#rail button')){
     const pane = document.querySelector(`.pane[data-pane="${b.dataset.pane}"]`);
@@ -532,6 +589,44 @@ function add(list){
     : 'No files selected.';
 }
 
+// Names the file right where it landed, so a reviewer never has to guess which PDF the
+// dropzone actually picked up. Removable only before the run starts - once a file is
+// queued to the parser, pulling it out from under an in-flight job would leave nothing
+// for the polling loop to match its status back to.
+const CHIP_STATUS = {run:'running', done:'done', fail:'failed'};
+
+function renderChips(){
+  const box = $('#chiplist');
+  if (!box) return;
+  box.innerHTML = queue.map((q, i) => {
+    const badge = q.status === 'wait'
+      ? `<span class="x" data-remove="${i}" title="Remove ${esc(q.file.name)}">&#10005;</span>`
+      : `<span class="chipstatus ${q.status}">${CHIP_STATUS[q.status] || q.status}</span>`;
+    return `<div class="filechip">
+      <span class="ico">PDF</span>
+      <span class="fname" title="${esc(q.file.name)}">${esc(q.file.name)}</span>
+      <span class="fsize">${(q.file.size/1024).toFixed(0)} KB</span>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+function removeFile(idx){
+  queue.splice(idx, 1);
+  renderRows();
+  $('#run').disabled = !queue.some(q => q.status === 'wait');
+  $('#clear').disabled = queue.length === 0;
+  $('#queue-hint').textContent = queue.length
+    ? `${queue.length} file${queue.length > 1 ? 's' : ''} queued`
+    : 'No files selected.';
+}
+
+$('#chiplist').addEventListener('click', ev => {
+  const btn = ev.target.closest('[data-remove]');
+  if (!btn) return;
+  removeFile(Number(btn.dataset.remove));
+});
+
 $('#clear').addEventListener('click', () => {
   queue = []; renderRows();
   ['#c-status','#c-result','#c-download'].forEach(s => $(s).classList.add('hidden'));
@@ -563,6 +658,7 @@ function coverageText(rec){
 // ---- status rows --------------------------------------------------------
 function renderRows(){
   const box = $('#rows');
+  renderChips();
   if (!queue.length){ box.innerHTML = ''; updateRail(); return; }
   $('#c-status').classList.remove('hidden');
 
