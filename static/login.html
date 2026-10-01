@@ -11,6 +11,7 @@
     --line:#e3e7ec; --accent:#2f6feb; --accent-ink:#fff;
     --ok:#127a4b; --ok-bg:#e6f5ed; --warn:#8a5a00; --warn-bg:#fdf3e0;
     --err:#b3261e; --err-bg:#fdeceb; --radius:10px;
+    --pattern:rgba(47,111,235,.10);
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
   @media (prefers-color-scheme:dark){
@@ -19,6 +20,7 @@
       --line:#2a323c; --accent:#4c8dff; --accent-ink:#0b0e12;
       --ok:#5ddc9c; --ok-bg:#12291f; --warn:#e8b45a; --warn-bg:#2a2114;
       --err:#ff8a80; --err-bg:#2d1614;
+      --pattern:rgba(76,141,255,.10);
     }
   }
   :root[data-theme="dark"]{
@@ -26,6 +28,7 @@
     --line:#2a323c; --accent:#4c8dff; --accent-ink:#0b0e12;
     --ok:#5ddc9c; --ok-bg:#12291f; --warn:#e8b45a; --warn-bg:#2a2114;
     --err:#ff8a80; --err-bg:#2d1614;
+      --pattern:rgba(76,141,255,.10);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -33,32 +36,41 @@
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 
   /* Split: what the agent does on the left, the one field it needs on the right. */
-  .split{min-height:100%;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+  /* The pitch column is sized to its content, so no dead band opens up beside the text
+     on a wide screen; the form side takes whatever width is left. */
+  .split{min-height:100%;display:grid;grid-template-columns:minmax(0,600px) minmax(0,1fr)}
   @media (max-width:820px){ .split{grid-template-columns:minmax(0,1fr)} }
 
   .pitch{background:var(--panel);border-right:1px solid var(--line);
-    padding:48px clamp(24px,5vw,64px);display:flex;flex-direction:column;gap:24px}
+    padding:36px 56px;display:flex;flex-direction:column;gap:24px}
   @media (max-width:820px){ .pitch{border-right:0;border-bottom:1px solid var(--line);padding:32px 20px} }
   .brandline{display:flex;align-items:center;gap:11px;font-weight:650;font-size:15px}
   .logo{flex:none;width:34px;height:34px;border-radius:9px;background:var(--accent);
     color:var(--accent-ink);display:grid;place-items:center}
   .logo svg{width:20px;height:20px}
-  .pitch h1{font-size:clamp(24px,3vw,30px);line-height:1.2;margin:0;letter-spacing:-.02em;
+  .pitch{gap:28px;position:relative;overflow:hidden}
+  .pitch > *{position:relative}
+  /* A faint dot grid, strongest at the divider and fading out before it reaches the text. */
+  .pitch::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(var(--pattern) 1.2px,transparent 1.4px);background-size:18px 18px;
+    -webkit-mask-image:linear-gradient(to left,#000,transparent 85%);
+    mask-image:linear-gradient(to left,#000,transparent 85%)}
+  .pitch .mid{margin-block:auto;display:flex;flex-direction:column;gap:22px}
+  .pitch h1{font-size:clamp(26px,3vw,32px);line-height:1.15;margin:0;letter-spacing:-.025em;
     text-wrap:balance;max-width:20ch}
-  .pitch p{margin:0;color:var(--muted);font-size:14px;max-width:50ch}
+  .pitch .sub{margin:-10px 0 0;color:var(--muted);font-size:15px;max-width:40ch}
 
-  /* A sample check, laid out the way the agent reports one. */
-  .recon{border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;
-    background:var(--panel-2);max-width:440px}
-  .recon .h{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;
-    border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;
-    letter-spacing:.06em;color:var(--muted);font-weight:600}
-  .recon .l{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:6px 12px}
-  .recon .n{font-family:var(--mono);font-variant-numeric:tabular-nums}
-  .recon .l.tot{border-top:1px solid var(--line);font-weight:650}
-  .recon .ok{display:flex;align-items:center;gap:7px;padding:8px 12px;background:var(--ok-bg);
-    color:var(--ok);font-weight:600}
-  .byline{margin-top:auto;font-size:12.5px;color:var(--muted)}
+  /* Four capabilities as equal cards, two by two, so the panel fills evenly. */
+  .caps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  @media (max-width:520px){ .caps{grid-template-columns:minmax(0,1fr)} }
+  .caps li{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px 14px;
+    display:grid;gap:6px;align-content:start}
+  .caps .i{flex:none;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;
+    background:color-mix(in srgb,var(--accent) 12%,var(--panel));color:var(--accent)}
+  .caps .i svg{width:17px;height:17px}
+  .caps b{font-size:14.5px;font-weight:600}
+  .caps small{font-size:13px;color:var(--muted);line-height:1.45}
+  .byline{font-size:12.5px;color:var(--muted)}
   .byline b{color:var(--ink);font-weight:600}
 
   .side{display:grid;place-items:center;padding:48px 24px}
@@ -92,16 +104,15 @@
         stroke-width="2" stroke-linecap="round"><path d="M5 4h14v16H5z"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg></span>
       Financial Statement Agent
     </div>
-    <h1>Every figure extracted, every total proven.</h1>
-    <p>Drop a deal pack. The agent pulls every line item and segment column, then checks each
-      subtotal against the document&rsquo;s own arithmetic.</p>
-    <div class="recon" role="img" aria-label="Example reconciliation check: three revenue lines add to the printed total of 1,265.50">
-      <div class="h"><span>Example check &middot; page 2</span><span>USD thousands</span></div>
-      <div class="l"><span>Rental income</span><span class="n">1,184.20</span></div>
-      <div class="l"><span>Parking and storage</span><span class="n">62.40</span></div>
-      <div class="l"><span>Other income</span><span class="n">18.90</span></div>
-      <div class="l tot"><span>Total revenue, as printed</span><span class="n">1,265.50</span></div>
-      <div class="ok"><span aria-hidden="true">&#10003;</span>Ties: the three lines add to 1,265.50</div>
+    <div class="mid">
+    <h1>AI-powered financial statement extraction.</h1>
+    <p class="sub">From PDF to reconciled statement, without retyping a number.</p>
+    <ul class="caps">
+      <li><span class="i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></span><b>Agentic extraction</b><small>Parses every table, then checks and repairs its own output.</small></li>
+      <li><span class="i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><b>Self-reconciling</b><small>Every subtotal and total is tested against the document.</small></li>
+      <li><span class="i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span><b>Audit-ready</b><small>Every figure is traced to the page and row it came from.</small></li>
+      <li><span class="i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span><b>Learns your templates</b><small>Approve a fix once and it applies to every later document.</small></li>
+    </ul>
     </div>
     <div class="byline">Built by <b>Suprabhat Samanta</b> &middot; Evalueserve</div>
   </section>
